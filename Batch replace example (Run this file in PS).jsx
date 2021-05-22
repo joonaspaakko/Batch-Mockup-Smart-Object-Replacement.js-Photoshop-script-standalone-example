@@ -14,6 +14,8 @@ mockups([
     output: output, 
     mockupPath: '$/assets/example-mockup.psd', 
     smartObjects: [
+      
+      // Smart object #1
       {
         target: '@screen',
         input: [
@@ -23,8 +25,15 @@ mockups([
         align: 'center center',
         resize: 'fill', 
       },
+      
+      // You could have more smart objects per mockup file...
+      // {},
+      
     ]
   },
+  
+  // You could have more mockup files...
+  // {},
     
 ]);
 
