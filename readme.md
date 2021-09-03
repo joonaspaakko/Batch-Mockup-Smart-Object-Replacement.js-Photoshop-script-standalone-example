@@ -1,27 +1,26 @@
-This is just a stand-alone example. The actual script repo and it's usage details you can find here: [Batch Mockup Smart Object Replacement.jsx Photoshop script](https://github.com/joonaspaakko/Batch-Mockup-Smart-Object-Replacement-photoshop-script).
 
+# STANDALONE EXAMPLE for Batch Mockup Smart Object Replacement.jsx
 
-## Example usage and other details:
+## To test this example
 
-1. Run the script `Batch replace example (Run this file in PS).jsx` in Photoshop.
-    - It may ask to load missing fonts. You can just press cancel and the script should start running.
-    - The easiest way to run scripts in Photoshop is by dragging the script file to the application icon. 
-        - Or at least this way is perfect for scripts like this one that you don't need a shortcut for...
-        - On Windows you can drag the file over the PS icon on the taskbar, hold down `Shift` and release.
-        - On Mac you can drag the file into the PS icon in the Dock.
-    - This file contains settings for the script:
-        - Path to the mockup .psd file(s) you want to process
-        - Target smart object(s): the input files are placed inside it one by one...
-        - Input folder paths
-        - etc...
-2. What will happen when you run the script: 
-      1. The script opens `assets/example-mockup.psd`
-          - You could process multiple psd files, but in this example it's just this one file.
-      2. Goes through every single input file at `assets/_input files` (and its sub folders in this case):
-          1. Replaces the `target: '@screen'` smart object layer's contents with the file
-            - Could have more than one smart object `target` as well, but in this case there's just the one.
-          2. Saves the document as jpg as per the settings.
-          3. Moves on to the next file....
-      3. When it's done, the output files will be at `assets/_output files`.
-          - In this case The folder is already filled with files, so you may actually want to delete this folder and run it again. 
+1. Check: 
+    - `assets/example-mockup.psd` - To understand what to expect from the output files. Might want to open it too
+    - `assets/_input files` - To understand what kind of files are input
+    - `assets/_output files` - To understand that comes out
+2. Remove the folder: `assets/_output files` (or the files inside)
+    - This will be created and filled when the settings script (below) is run. The script would overwrite files, but for testing purposes it would be better to remove the folder and see what happens.
+3. Open/run `Batch replace example (Run this file in PS).jsx` in Photoshop. 
+    - If you don't now how, check [this documentation/gif](https://app.gitbook.com/@joonaspaakko/s/batch-mockup-smart-object-replacement-jsx-photosho/how-to-run-the-script).
+4. Check the folder: `assets/_output files`
+    - You may be able to keep the folder open while the script runs to see each output file as they are created. Just make sure the folder window is not overlapping with Photoshop's window.
 
+> You could also try to play with the settings and input files to get a better understanding of its capabilities. The script repository includes more advanced examples.
+
+# Batch Mockup Smart Object Replacement.jsx Photoshop script
+
+A script that can batch process multiple mockup files and is able to replace multiple smart objects per mockup. 
+
+> You can find the script repository [here](https://github.com/joonaspaakko/Batch-Mockup-Smart-Object-Replacement-photoshop-script).
+
+## [Documentation: Usage](https://joonaspaakko.gitbook.io/batch-mockup-smart-object-replacement-jsx-photosho/)
+## [All options](https://joonaspaakko.gitbook.io/batch-mockup-smart-object-replacement-jsx-photosho/all-options)
