@@ -10,7 +10,7 @@
 2. Remove the folder: `assets/_output files` (or the files inside)
     - This will be created and filled when the settings script (below) is run. The script would overwrite files, but for testing purposes it would be better to remove the folder and see what happens.
 3. Open/run `Batch replace example (Run this file in PS).jsx` in Photoshop. 
-    - If you don't now how, check [this documentation/gif](https://app.gitbook.com/@joonaspaakko/s/batch-mockup-smart-object-replacement-jsx-photosho/how-to-run-the-script).
+    - If you don't now how, check [this documentation/gif](https://joonaspaakko.gitbook.io/batch-mockup-smart-object-replacement-jsx-photosho/how-to-run-the-script).
 4. Check the folder: `assets/_output files`
     - You may be able to keep the folder open while the script runs to see each output file as they are created. Just make sure the folder window is not overlapping with Photoshop's window.
 
