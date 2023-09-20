@@ -1,5 +1,5 @@
 
-// v.1.7.
+// v.1.9.
 // Batch Mockup Smart Object Replacement.jsx
 
 // You'll need to incplude this file to another script file:
@@ -36,8 +36,23 @@ mockups([
 
 // CHANGELOG
 
+// v.1.9.
+// - Now the property "mockupPath" can lead to a folder, in which case  it will 
+//   process all psd or psb files in that folder using the same settings.
+// - Added new property "mockupNested" that works the same as "inputNested", 
+//   but only if "mockupPath" is a folder.
+// - Added the properties `input` and `inputNested` to the smart object settings,
+//   just like each smart object target, but with this each smart object picks input
+//   files sequentially from the same pool of images.
+//     - I consider this to be an experimental feature since if you don't have the 
+//       perfect amount of images, the last image will contain leftovers from the 
+//       previous loop. For example if you have 9 images and 2 smart objects, the 
+//       output will be 5 images with the last smart object containing an image 
+//       from the previous output.
+
 // v.1.8.
-// - Added 2 new options that allow you to edit input files on the fly, which could potentially eliminate the need to batch process input files before running this mockup script.
+// - Added 2 new options that allow you to edit input files on the fly, which could potentially eliminate 
+//   the need to batch process input files before running this mockup script.
 //   - These options are specific to each smart object in the mockup.
 //   - Usage example: 
 //       inputPlaced_runScript: '$/Input placed script.jsx',
@@ -100,10 +115,12 @@ function mockups( mockups ) {
 
 function soReplaceBatch( mockups ) {
   
-  for ( var i=0; i < mockups.length; i++ ) {
-    var mockup = mockups[i];
+  addMultipleMockupsByPath( mockups );
+  
+  each( mockups, function( mockup ) {
+    
     var mockupPSD = absolutelyRelativePath( mockup.mockupPath );
-    if ( mockupPSD.file ) {
+    if ( mockupPSD.file && mockupPSD.extension ) {
       
       app.open( mockupPSD.file );
       
@@ -121,17 +138,49 @@ function soReplaceBatch( mockups ) {
         });
       }
       
-      soReplace({
-        output: mockup.output,
-        items: mockup.smartObjects,
-        noRepeats: mockup.noRepeats,
-      });
+      mockup.items = mockup.smartObjects;
+      delete mockup.smartObjects;
+      
+      soReplace( mockup );
       
       app.activeDocument.close( SaveOptions.DONOTSAVECHANGES );
       
     }
-  }
+  
+  });
+  
   alert('Batch process done!');
+}
+
+function addMultipleMockupsByPath( mockups ) {
+  
+  each(mockups, function( mockup ) {
+    
+    var mockupPSD = absolutelyRelativePath( mockup.mockupPath );
+    var isFolder = !mockupPSD.extension;
+    if ( isFolder ) {
+      
+      var mockupsFolder = new Folder( mockupPSD.decoded );
+      var mockupFiles = getFiles( mockupsFolder, { inputFormats: "psd|psb", inputNested: !!mockup.mockupNested });
+            
+      if ( !mockupFiles ) return;
+      // Goes through every found mockup file...
+      each( mockupFiles, function( mockupFile ) {
+        
+        // Get text string of the full (absolute) path to the file
+        var pathToMockup = mockupFile.fullName;
+        // Create new mockup settings object using the path...
+        var settingsCopy = JSON.parse(JSON.stringify(mockup));
+        settingsCopy.mockupPath = pathToMockup;
+        // Add new mockup settings to the array of mockups
+        mockups.push( settingsCopy );
+        
+      });
+      
+    }
+    
+  });
+  
 }
 
 function soReplace( rawData ) {
@@ -146,13 +195,24 @@ function soReplace( rawData ) {
     var data = replaceLoopOptionsFiller( rawData );
     
     // Preparing files
-    for ( var i=0; i < data.items.length; i++ ) {
-      var item = data.items[i];
-      item.files = prepFiles( item );
+    if ( data.doc.input ) {
+      
+      data.doc.files = prepFiles( data.doc, data );
+      data.maxLoop = Math.ceil(data.doc.files.length / data.items.length);
+      data.largestArray = data.doc.files;
+      
+    }
+    else {
+      
+      each( data.items, function( item ) {
+        item.files = prepFiles( item );
+      });
+      
+      // This makes sure all file arrays are the same length
+      data = evenOutFileArrays( data );
+      
     }
     
-    // This makes sure all file arrays are the same length
-    data = evenOutFileArrays( data );
     replaceLoop( data );
     
     app.preferences.rulerUnits = rulerUnits;
@@ -164,7 +224,6 @@ function soReplace( rawData ) {
 function replaceLoop( data ) {
   
   for ( var fileIndex=0; fileIndex < data.maxLoop; fileIndex++ ) {
-    
     for ( var itemIndex=0; itemIndex < data.items.length; itemIndex++ ) {
       var item = data.items[ itemIndex ];
       if ( item.target ) {
@@ -178,7 +237,10 @@ function replaceLoop( data ) {
         if ( targetConfirmed ) {
           
           if ( fileIndex == 0 ) convertSoToEmbedded(); // Just in case the target layer is a linked SO...
-          var sourceFilePath = item.files[ fileIndex ];
+          
+          // alert( data.doc.inputIndex )
+          var sourceFilePath = data.doc.files ? data.doc.files[ data.doc.input ? data.doc.inputIndex : fileIndex ] : item.files[ fileIndex ];
+          if ( data.doc.input ) data.doc.inputIndex++;
           
           if ( sourceFilePath !== null ) {
             
@@ -235,13 +297,14 @@ function parseFilePath( data, fileIndex, outputPathPrefix ) {
   
 }
 
-function prepFiles( item ) {
+function prepFiles( item, data ) {
+  
   if ( typeof item.input === 'string' ) item.input = [ item.input ];
   
   var inputFiles = [];
   for ( var i=0; i < item.input.length; i++ ) {
     var inputFolder = new Folder( item.input[i] );
-    var files = getFiles( inputFolder, item );
+    var files = getFiles( inputFolder, item, data );
     if ( files ) inputFiles = inputFiles.concat( files );
   };
   
@@ -288,32 +351,35 @@ function sortAlphaNum(a,b) {
   
 }
 
-function getFiles(folder, item) {
+function getFiles(folder, item, data ) {
 
+  data = data || {};
+  data.doc = data.doc || {};
+  
   var filteredFiles = [];
   var files = folder.getFiles();
   
   for ( var i = 0; i < files.length; i++ ) {
     
     var file = files[i];
-    var regex = ".+\.(?:"+ (item.inputFormats ? item.inputFormats : 'tiff?|gif|jpe?g|bmp|eps|svg|png|ai|psd|pdf') +")$";
+    var regex = ".+\.(?:"+ (data.doc.inputFormats || item.inputFormats || 'tiff?|gif|jpe?g|bmp|eps|svg|png|ai|psd|pdf') +")$";
     var matchThis = new RegExp(regex, "i");
     var fileFilter = file.name.match( matchThis );
     
     var isFile = (file instanceof File && fileFilter);
     var isFolder = (file instanceof Folder);
     
-    if ( isFile ) {
-      filteredFiles.push( file );
-    }
-    else if ( isFolder && item.inputNested ) {
+    if ( isFolder && item.inputNested ) {
       var folder = file;
-      filteredFiles = filteredFiles.concat( this.getFiles( folder, item ) );
+      filteredFiles = filteredFiles.concat( this.getFiles( folder, item, data ) );
+    }
+    else if ( isFile ) {
+      filteredFiles.push( file );
     }
     
   }
-  
-  return filteredFiles.length < 1 ? null : filteredFiles;
+    
+  return filteredFiles.length < 1 ? [] : filteredFiles;
   
 }
 
@@ -377,8 +443,19 @@ function replaceLoopOptionsFiller( rawData ) {
   var doc = app.activeDocument;
   data.doc = {
     name: doc.name.replace(/\.[^\.]+$/, ''),
-    path: File.decode( doc.path ) + '/'
+    path: File.decode( doc.path ) + '/',
   };
+  
+  if ( rawData.inputNested ) data.doc.inputNested = rawData.inputNested;
+  data.doc.input  = rawData.input;
+  data.doc.inputFormats = rawData.inputFormats;
+  data.doc.inputIndex = 0;
+  
+  // Input folder path
+  if ( data.doc.input && typeof data.doc.input === 'string' ) data.doc.input = [ data.doc.input ];
+  each( data.doc.input, function( item, index ) {
+    data.doc.input[ index ] = absolutelyRelativePath( data.doc.input[index] ).decoded;
+  });
   
   docPath = data.doc.path;
   
@@ -415,9 +492,11 @@ function replaceLoopOptionsFiller( rawData ) {
     }
     
     // Input folder path
-    if ( typeof item.input === 'string' ) item.input = [ item.input ];
-    for ( var inputIndex=0; inputIndex < item.input.length; inputIndex++ ) {
-      item.input[ inputIndex ] = absolutelyRelativePath( item.input[inputIndex] ).decoded;
+    if ( !data.doc.input ) {
+      if ( typeof item.input === 'string' ) item.input = [ item.input ];
+      for ( var inputIndex=0; inputIndex < item.input.length; inputIndex++ ) {
+        item.input[ inputIndex ] = absolutelyRelativePath( item.input[inputIndex] ).decoded;
+      }
     }
     
   }
@@ -666,7 +745,7 @@ function replaceSoContents( item, sourcepath ) {
           }
           
           if ( item.inputPlaced_runScript ) {
-            const scriptPath = absolutelyRelativePath( item.inputPlaced_runScript ).decoded;
+            var scriptPath = absolutelyRelativePath( item.inputPlaced_runScript ).decoded;
             $.evalFile( File(scriptPath) );
           }
         } catch(e) { alert(e) }
@@ -942,9 +1021,26 @@ function absolutelyRelativePath( string ) {
     
   }
   
+  var newFile = File( newString );
+  
   return {
-    file: File( newString ),
-    decoded: File.decode( newString )
+    file: newFile,
+    decoded: File.decode( newString ),
+    extension: getExtension( newFile.name ),
   };
   
 }
+
+function getExtension( string ) {
+  
+  var array        = (string||'').split('.');
+  var lengthBefore = array.length;
+  var extension    = array.pop();
+  var lengthAfter  = array.length;
+  
+  return (lengthBefore !== lengthAfter && lengthAfter !== 0 ) ? extension : undefined;
+  
+};
+
+// JSON
+"object"!=typeof JSON&&(JSON={}),function(){"use strict";var gap,indent,meta,rep,rx_one=/^[\],:{}\s]*$/,rx_two=/\\(?:["\\\/bfnrt]|u[0-9a-fA-F]{4})/g,rx_three=/"[^"\\\n\r]*"|true|false|null|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?/g,rx_four=/(?:^|:|,)(?:\s*\[)+/g,rx_escapable=/[\\"\u0000-\u001f\u007f-\u009f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g,rx_dangerous=/[\u0000\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/g;function f(t){return t<10?"0"+t:t}function this_value(){return this.valueOf()}function quote(t){return rx_escapable.lastIndex=0,rx_escapable.test(t)?'"'+t.replace(rx_escapable,function(t){var e=meta[t];return"string"==typeof e?e:"\\u"+("0000"+t.charCodeAt(0).toString(16)).slice(-4)})+'"':'"'+t+'"'}function str(t,e){var n,o,f,u,r,$=gap,i=e[t];switch(i&&"object"==typeof i&&"function"==typeof i.toJSON&&(i=i.toJSON(t)),"function"==typeof rep&&(i=rep.call(e,t,i)),typeof i){case"string":return quote(i);case"number":return isFinite(i)?String(i):"null";case"boolean":case"null":return String(i);case"object":if(!i)return"null";if(gap+=indent,r=[],"[object Array]"===Object.prototype.toString.apply(i)){for(n=0,u=i.length;n<u;n+=1)r[n]=str(n,i)||"null";return f=0===r.length?"[]":gap?"[\n"+gap+r.join(",\n"+gap)+"\n"+$+"]":"["+r.join(",")+"]",gap=$,f}if(rep&&"object"==typeof rep)for(n=0,u=rep.length;n<u;n+=1)"string"==typeof rep[n]&&(f=str(o=rep[n],i))&&r.push(quote(o)+(gap?": ":":")+f);else for(o in i)Object.prototype.hasOwnProperty.call(i,o)&&(f=str(o,i))&&r.push(quote(o)+(gap?": ":":")+f);return f=0===r.length?"{}":gap?"{\n"+gap+r.join(",\n"+gap)+"\n"+$+"}":"{"+r.join(",")+"}",gap=$,f}}"function"!=typeof Date.prototype.toJSON&&(Date.prototype.toJSON=function(){return isFinite(this.valueOf())?this.getUTCFullYear()+"-"+f(this.getUTCMonth()+1)+"-"+f(this.getUTCDate())+"T"+f(this.getUTCHours())+":"+f(this.getUTCMinutes())+":"+f(this.getUTCSeconds())+"Z":null},Boolean.prototype.toJSON=this_value,Number.prototype.toJSON=this_value,String.prototype.toJSON=this_value),"function"!=typeof JSON.stringify&&(meta={"\b":"\\b","	":"\\t","\n":"\\n","\f":"\\f","\r":"\\r",'"':'\\"',"\\":"\\\\"},JSON.stringify=function(t,e,n){var o;if(gap="",indent="","number"==typeof n)for(o=0;o<n;o+=1)indent+=" ";else"string"==typeof n&&(indent=n);if(rep=e,e&&"function"!=typeof e&&("object"!=typeof e||"number"!=typeof e.length))throw Error("JSON.stringify");return str("",{"":t})}),"function"!=typeof JSON.parse&&(JSON.parse=function(text,reviver){var j;function walk(t,e){var n,o,f=t[e];if(f&&"object"==typeof f)for(n in f)Object.prototype.hasOwnProperty.call(f,n)&&(void 0!==(o=walk(f,n))?f[n]=o:delete f[n]);return reviver.call(t,e,f)}if(text=String(text),rx_dangerous.lastIndex=0,rx_dangerous.test(text)&&(text=text.replace(rx_dangerous,function(t){return"\\u"+("0000"+t.charCodeAt(0).toString(16)).slice(-4)})),rx_one.test(text.replace(rx_two,"@").replace(rx_three,"]").replace(rx_four,"")))return j=eval("("+text+")"),"function"==typeof reviver?walk({"":j},""):j;throw SyntaxError("JSON.parse")})}();
