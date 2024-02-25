@@ -1,5 +1,5 @@
 
-// v.1.9.
+// v.2.0.
 // Batch Mockup Smart Object Replacement.jsx
 
 // You'll need to incplude this file to another script file:
@@ -35,6 +35,14 @@ mockups([
 */
 
 // CHANGELOG
+
+// v.2.0.
+// - Fixes an issue introduced in v.1.9, in which the entire process failed if you didn't use the new mockup `input` option.
+//    - FYI: That mockup `input` is in essence the same as target (smart object) `input`, except every smart object takes input files from the same folder sequentially.
+// - Fixes an issue with the `trimTranspancy` option that would prevent the entire mockup from processing.
+//    - It didn't affect other mockups that didn't use `trimTransparency`  
+// - Adds a new jpg specific output quality option `output.jpgQuality`
+// - Adds a new mockup option `ignore` that allows you to drop out certain mockups from being processed without having to comment out or remove them.
 
 // v.1.9.
 // - Now the property "mockupPath" can lead to a folder, in which case  it will 
@@ -118,6 +126,9 @@ function soReplaceBatch( mockups ) {
   addMultipleMockupsByPath( mockups );
   
   each( mockups, function( mockup ) {
+
+    // Don't process this mockup
+    if ( mockup.ignore ) return;
     
     var mockupPSD = absolutelyRelativePath( mockup.mockupPath );
     if ( mockupPSD.file && mockupPSD.extension ) {
@@ -267,7 +278,7 @@ function replaceLoop( data ) {
     var splitfilenamepath = outputFilePath.filename.split("/"); 
     splitfilenamepath.splice(-1); 
     newFolder( outputFilePath.path + splitfilenamepath.join("/") );
-    app.activeDocument.saveAs( new File( outputFilePath.fullpath ), saveOpts()[ data.output.format ](), true, Extension.LOWERCASE);
+    app.activeDocument.saveAs( new File( outputFilePath.fullpath ), saveOpts()[ data.output.format ](data), true, Extension.LOWERCASE);
     
     if ( sourceFilePath === null ) app.activeDocument.activeLayer.visible = item.targetVisibility;
     
@@ -450,12 +461,17 @@ function replaceLoopOptionsFiller( rawData ) {
   data.doc.input  = rawData.input;
   data.doc.inputFormats = rawData.inputFormats;
   data.doc.inputIndex = 0;
-  
+
   // Input folder path
-  if ( data.doc.input && typeof data.doc.input === 'string' ) data.doc.input = [ data.doc.input ];
-  each( data.doc.input, function( item, index ) {
-    data.doc.input[ index ] = absolutelyRelativePath( data.doc.input[index] ).decoded;
-  });
+  if ( data.doc.input ) {
+    if ( typeof data.doc.input === 'string' ) {
+      data.doc.input = [ data.doc.input ];
+    }
+
+    each( data.doc.input, function( item, index ) {
+      data.doc.input[ index ] = absolutelyRelativePath( data.doc.input[index] ).decoded;
+    });
+  }
   
   docPath = data.doc.path;
   
@@ -522,7 +538,7 @@ function replaceLoopOptionsFiller( rawData ) {
 
 function saveOpts() {
   return {
-    psd: function() {
+    psd: function(configData) {
       
       var psd_saveOpts = new PhotoshopSaveOptions();
       
@@ -534,7 +550,7 @@ function saveOpts() {
       return psd_saveOpts;
       
     },
-    pdf: function() {
+    pdf: function(configData) {
       
       var presetName = '[High Quality Print]';
       var pdf_SaveOpts = new PDFSaveOptions();
@@ -542,16 +558,16 @@ function saveOpts() {
       return pdf_SaveOpts;
       
     },
-    jpg: function() {
+    jpg: function(configData) {
       
       var jpg_SaveOpts = new JPEGSaveOptions();
       jpg_SaveOpts.matte   = MatteType.WHITE;
-      jpg_SaveOpts.quality = 12;
+      jpg_SaveOpts.quality = configData.output.jpgQuality || 12;
       jpg_SaveOpts.formatOptions.STANDARDBASELINE;
       return jpg_SaveOpts;
       
     },
-    png: function() {
+    png: function(configData) {
       
       var png_SaveOpts = new PNGSaveOptions();
       png_SaveOpts.compression = 9;
@@ -559,7 +575,7 @@ function saveOpts() {
       return png_SaveOpts;
       
     },
-    tif: function() {
+    tif: function(configData) {
       
       var tiff_SaveOpts = new TiffSaveOptions();
       tiff_SaveOpts.alphaChannels      = true;
@@ -690,6 +706,9 @@ function replaceSoContents( item, sourcepath ) {
             soDoc.activeLayer.duplicate( returnLayer, ElementPlacement.PLACEBEFORE );
             
           }
+          
+          soDoc.close( SaveOptions.DONOTSAVECHANGES );
+          if ( item.align ) returnLayer.remove();
           
         }
         
